@@ -1,5 +1,5 @@
 import { createAgent } from "langchain";
-import { model } from "@/lib/gemini";
+import { geminiModels } from "@/lib/gemini";
 import {
   calculatorTool,
   weatherTool,
@@ -11,23 +11,27 @@ import {
   expenseTool,
 } from "@/lib/tools";
 
-export const agent = createAgent({
-  model,
-  tools: [
-    calculatorTool,
-    weatherTool,
-    dateTimeTool,
-    currencyTool,
-    notesSearchTool,
-    addTaskTool,
-    listTasksTool,
-    expenseTool,
-  ],
-  systemPrompt: `You are a helpful AI assistant.
-Use a tool only when it is necessary for current data or an action.
-For calculations use the calculator tool.
-For current weather or exchange rates use the corresponding external-data tool.
-Do not repeatedly call the same tool if it already returned the needed result.
-If a tool fails, explain what could not be retrieved rather than trying indefinitely.
-For general questions, answer directly and concisely.`,
-});
+const tools = [
+  calculatorTool,
+  weatherTool,
+  dateTimeTool,
+  currencyTool,
+  notesSearchTool,
+  addTaskTool,
+  listTasksTool,
+  expenseTool,
+];
+
+const systemPrompt = `You are a helpful AI assistant.
+Use tools only when needed for current information or an action.
+Use calculator for arithmetic; weather and currency tools for live data.
+Don't repeatedly call the same tool once it returns an adequate result.
+If a tool fails, explain it clearly. For general questions, answer directly.`;
+
+export const agentCandidates = geminiModels.map(({ id, model }) => ({
+  id,
+  agent: createAgent({ model, tools, systemPrompt }),
+}));
+
+// Primary agent remains available to any code already importing it.
+export const agent = agentCandidates[0].agent;
