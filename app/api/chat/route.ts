@@ -1,12 +1,27 @@
-import { agent } from "@/lib/agent";
+import { agentCandidates } from "@/lib/agent";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const DEADLINE_MS = 30000;
+const MODEL_TIMEOUT_MS = 9000;
+
+// This caps how long a server waits for a model. It cannot forcibly stop a
+// Gemini request already in flight.
+async function withDeadline<T>(operation: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Model deadline exceeded")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export async function POST(request: Request) {
-  const started = Date.now();
   try {
     const body: unknown = await request.json();
     const message =
@@ -15,46 +30,46 @@ export async function POST(request: Request) {
         : undefined;
 
     if (typeof message !== "string" || !message.trim() || message.length > 4000) {
-      return Response.json(
-        { error: "Message must be a non-empty string up to 4000 characters." },
-        { status: 400 }
-      );
+      return Response.json({ error: "Message must be 1–4000 characters." }, { status: 400 });
     }
 
-    console.info("[chat] invoking agent", { length: message.length });
-    // A hard response deadline prevents requests from leaving the UI spinning.
-    // Promise.race limits response time; it does not cancel an already running
-    // provider request. Tool/API timeouts must be handled separately.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error("Agent request timed out after 30 seconds")),
-        DEADLINE_MS
-      );
-    });
+    // IMPORTANT: Automatically retrying write actions can duplicate side effects.
+    // For this learning prototype failover is restricted to read-only messages.
+    // Messages that appear to request task creation run only on the primary model.
+    const writeIntent = /\b(add|create|save|delete|remove|update|edit|complete|mark)\b/i.test(message);
+    const candidates = writeIntent ? agentCandidates.slice(0, 1) : agentCandidates;
 
-    try {
-      const result = await Promise.race([
-        agent.invoke(
-          { messages: [{ role: "user", content: message.trim() }] },
-          { recursionLimit: 8 }
-        ),
-        deadline,
-      ]);
+    for (const { id, agent } of candidates) {
+      const start = Date.now();
+      console.info("[chat] attempting", id);
+      try {
+        const result = await withDeadline(
+          agent.invoke(
+            { messages: [{ role: "user", content: message.trim() }] },
+            { recursionLimit: 8 }
+          ),
+          MODEL_TIMEOUT_MS
+        );
 
-      const reply = result.messages.at(-1)?.text;
-      console.info("[chat] completed", { elapsedMs: Date.now() - started });
-      return Response.json({ reply: reply || "No reply from the agent" });
-    } finally {
-      if (timer) clearTimeout(timer);
+        const reply = result.messages.at(-1)?.text;
+        if (!reply) throw new Error("Empty model reply");
+        console.info("[chat] completed", { model: id, elapsedMs: Date.now() - start });
+        return Response.json({ reply, model: id });
+      } catch (error) {
+        console.warn("[chat] model failed", {
+          model: id,
+          elapsedMs: Date.now() - start,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
-  } catch (error) {
-    console.error("[chat] failed", { elapsedMs: Date.now() - started, error });
-    const timedOut =
-      error instanceof Error && error.message.includes("timed out");
+
     return Response.json(
-      { error: timedOut ? "The AI request took too long. Please try again." : "Unable to process your request." },
-      { status: timedOut ? 504 : 500 }
+      { error: "All available Gemini models failed or timed out. Check Google API connectivity and quota." },
+      { status: 503 }
     );
+  } catch (error) {
+    console.error("[chat] request failed", error);
+    return Response.json({ error: "Unable to process request." }, { status: 500 });
   }
 }
