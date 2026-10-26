@@ -36,7 +36,7 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/chat", {\n        signal: AbortSignal.timeout(35000),
         method: "POST",
 
         headers: {
@@ -51,7 +51,7 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Something went wrong");
+        throw new Error(data.error || `Request failed (HTTP ${response.status})`);
       }
 
       const assistantMessage: Message = {
