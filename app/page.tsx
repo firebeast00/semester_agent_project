@@ -65,14 +65,16 @@ export default function Home() {
         assistantMessage,
       ]);
     } catch (error) {
-      console.error(error);
+      console.error("Chat request failed:", error);
+      const errorMessage = error instanceof Error
+        ? (error.name === "TimeoutError" ? "The request took too long. Try again." : error.message)
+        : "An unexpected error occurred.";
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            "Sorry, I could not process your request.",
+          content: errorMessage,
         },
       ]);
     } finally {
