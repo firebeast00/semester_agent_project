@@ -73,7 +73,8 @@ export const weatherTool = tool(
     const geoResponse = await fetch(
       `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
         city
-      )}&count=1&language=en&format=json`
+      )}&count=1&language=en&format=json`,
+      { signal: AbortSignal.timeout(10000) }
     );
 
     if (!geoResponse.ok) {
@@ -92,7 +93,8 @@ export const weatherTool = tool(
 
     // 2. Get current weather using coordinates
     const weatherResponse = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code&timezone=auto`
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,wind_speed_10m,weather_code&timezone=auto`,
+      { signal: AbortSignal.timeout(10000) }
     );
 
     if (!weatherResponse.ok) {
@@ -156,7 +158,8 @@ export const dateTimeTool = tool(
 export const currencyTool = tool(
   async ({ amount, from, to }) => {
     const response = await fetch(
-      `https://api.frankfurter.app/latest?amount=${amount}&from=${from}&to=${to}`
+      `https://api.frankfurter.app/latest?amount=${amount}&from=${from}&to=${to}`,
+      { signal: AbortSignal.timeout(10000) }
     );
 
     if (!response.ok) {
