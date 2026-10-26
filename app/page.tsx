@@ -36,7 +36,8 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {\n        signal: AbortSignal.timeout(35000),
+      const response = await fetch("/api/chat", {
+        signal: AbortSignal.timeout(35000),
         method: "POST",
 
         headers: {
@@ -116,7 +117,6 @@ export default function Home() {
               "Notes",
               "Tasks",
               "Expenses",
-              "URL Reader",
             ].map((tool) => (
               <span
                 key={tool}
